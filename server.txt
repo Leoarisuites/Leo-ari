@@ -1,0 +1,93 @@
+# Server Files
+
+## server/index.ts
+```typescript
+import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, log } from "./vite";
+import { createServer } from "http";
+
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+// Basic CORS middleware
+app.use((_req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
+
+// Simple logging
+app.use((req, res, next) => {
+  log(`${req.method} ${req.url}`, 'express');
+  next();
+});
+
+// Health check
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Initialize server
+(async () => {
+  try {
+    log('Starting server initialization...', 'express');
+
+    const server = createServer(app);
+
+    // Register routes before setting up Vite
+    registerRoutes(app);
+    log('Routes registered', 'express');
+
+    try {
+      // Setup Vite middleware with additional error handling
+      await setupVite(app, server);
+      log('Vite middleware setup complete', 'express');
+    } catch (viteError) {
+      log(`Error setting up Vite middleware: ${viteError}`, 'express');
+      throw viteError;
+    }
+
+    const port = 5000;
+    log(`Attempting to start server on port ${port}...`, 'express');
+
+    server.listen(port, "0.0.0.0", () => {
+      log(`Server successfully started and running at http://0.0.0.0:${port}`, 'express');
+    });
+
+  } catch (error) {
+    log(`Fatal error during server startup: ${error}`, 'express');
+    setTimeout(() => process.exit(1), 1000);
+  }
+})();
+
+// Basic error handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  log(`Error: ${err.message}`, 'express');
+  res.status(500).json({ error: "Server Error" });
+});
+
+// Handle process signals
+process.on('SIGTERM', () => {
+  log('SIGTERM received, shutting down...', 'express');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  log('SIGINT received, shutting down...', 'express');
+  process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+  log(`Uncaught Exception: ${error.message}`, 'express');
+  log(error.stack || '', 'express');
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason) => {
+  log(`Unhandled Rejection: ${reason}`, 'express');
+  setTimeout(() => process.exit(1), 1000);
+});
+```
